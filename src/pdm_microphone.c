@@ -7,6 +7,7 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
 
 #include "hardware/clocks.h"
 #include "hardware/dma.h"
@@ -17,8 +18,13 @@
 #include "pdm_microphone.pio.h"
 
 #include "pico/pdm_microphone.h"
+#include "pico/stdlib.h"
+#include "pico/binary_info.h"
+#include "debug_pulse.h"
+#include "commandline.h"
 
-#define PDM_DECIMATION       64
+#define FIXED_VOLUME         6.33
+#define PDM_DECIMATION       128
 #define PDM_RAW_BUFFER_COUNT 2
 
 static struct {
@@ -30,12 +36,14 @@ static struct {
     uint raw_buffer_size;
     uint dma_irq;
     TPDMFilter_InitStruct filter;
-    uint16_t filter_volume;
     pdm_samples_ready_handler_t samples_ready_handler;
+    float clk_div;
 } pdm_mic;
 
 static void pdm_dma_handler();
-
+float pdm_microphone_get_clkdiv() {
+    return pdm_mic.clk_div;
+}
 int pdm_microphone_init(const struct pdm_microphone_config* config) {
     memset(&pdm_mic, 0x00, sizeof(pdm_mic));
     memcpy(&pdm_mic.config, config, sizeof(pdm_mic.config));
@@ -65,7 +73,7 @@ int pdm_microphone_init(const struct pdm_microphone_config* config) {
     uint pio_sm_offset = pio_add_program(config->pio, &pdm_microphone_data_program);
 
     float clk_div = clock_get_hz(clk_sys) / (config->sample_rate * PDM_DECIMATION * 4.0);
-
+    pdm_mic.clk_div = clk_div;
     pdm_microphone_data_init(
         config->pio,
         config->pio_sm,
@@ -100,16 +108,45 @@ int pdm_microphone_init(const struct pdm_microphone_config* config) {
     pdm_mic.filter.Out_MicChannels = 1;
     pdm_mic.filter.Decimation = PDM_DECIMATION;
     pdm_mic.filter.MaxVolume = 64;
-    pdm_mic.filter.Gain = 16;
+    pdm_mic.filter.Gain = 10;
+}
 
-    pdm_mic.filter_volume = pdm_mic.filter.MaxVolume;
+void pdm_microphone_set_clkdiv_nudge(uint8_t nudge) {
+    int div_int = (int)pdm_mic.clk_div;
+    int div_frac = (int)((pdm_mic.clk_div - div_int) * 256+0.5);
+    // use the fractional setting, and only nudge it up or down by a bit
+    pio_sm_set_clkdiv_int_frac(pdm_mic.config.pio, pdm_mic.config.pio_sm, div_int, div_frac+nudge);
+}
+void measure_freqs(void) {
+    uint f_pll_sys = frequency_count_khz(CLOCKS_FC0_SRC_VALUE_PLL_SYS_CLKSRC_PRIMARY);
+    uint f_pll_usb = frequency_count_khz(CLOCKS_FC0_SRC_VALUE_PLL_USB_CLKSRC_PRIMARY);
+    uint f_rosc = frequency_count_khz(CLOCKS_FC0_SRC_VALUE_ROSC_CLKSRC);
+    uint f_clk_sys = frequency_count_khz(CLOCKS_FC0_SRC_VALUE_CLK_SYS);
+    uint f_clk_peri = frequency_count_khz(CLOCKS_FC0_SRC_VALUE_CLK_PERI);
+    uint f_clk_usb = frequency_count_khz(CLOCKS_FC0_SRC_VALUE_CLK_USB);
+    uint f_clk_adc = frequency_count_khz(CLOCKS_FC0_SRC_VALUE_CLK_ADC);
+    uint f_clk_rtc = frequency_count_khz(CLOCKS_FC0_SRC_VALUE_CLK_RTC);
+ 
+    commandline_print("pll_sys  = %dkHz", f_pll_sys);
+    commandline_print("pll_usb  = %dkHz", f_pll_usb);
+    commandline_print("rosc     = %dkHz", f_rosc);
+    commandline_print("clk_sys  = %dkHz", f_clk_sys);
+    commandline_print("clk_peri = %dkHz", f_clk_peri);
+    commandline_print("clk_usb  = %dkHz", f_clk_usb);
+    commandline_print("clk_adc  = %dkHz", f_clk_adc);
+    commandline_print("clk_rtc  = %dkHz", f_clk_rtc);
+}
+
+void pdm_microphone_status() {
+    float clk_div = clock_get_hz(clk_sys) / (16000 * PDM_DECIMATION * 4.0);
+    #define MAX_PRINTF_MSG_LEN 30
+    commandline_print("clk div = %f", clk_div);
 }
 
 void pdm_microphone_deinit() {
     for (int i = 0; i < PDM_RAW_BUFFER_COUNT; i++) {
         if (pdm_mic.raw_buffer[i]) {
             free(pdm_mic.raw_buffer[i]);
-
             pdm_mic.raw_buffer[i] = NULL;
         }
     }
@@ -120,7 +157,6 @@ void pdm_microphone_deinit() {
         pdm_mic.dma_channel = -1;
     }
 }
-
 int pdm_microphone_start() {
     irq_set_enabled(pdm_mic.dma_irq, true);
     irq_set_exclusive_handler(pdm_mic.dma_irq, pdm_dma_handler);
@@ -132,7 +168,6 @@ int pdm_microphone_start() {
     } else {
         return -1;
     }
-
     Open_PDM_Filter_Init(&pdm_mic.filter);
 
     pio_sm_set_enabled(
@@ -207,14 +242,12 @@ void pdm_microphone_set_samples_ready_handler(pdm_samples_ready_handler_t handle
 
 void pdm_microphone_set_filter_max_volume(uint8_t max_volume) {
     pdm_mic.filter.MaxVolume = max_volume;
+    commandline_print("volume = %d", max_volume);
 }
 
 void pdm_microphone_set_filter_gain(uint8_t gain) {
-    pdm_mic.filter.Gain = gain;
-}
-
-void pdm_microphone_set_filter_volume(uint16_t volume) {
-    pdm_mic.filter_volume = volume;
+//    pdm_mic.filter.Gain = gain;
+    commandline_print("gain = %d", gain);
 }
 
 int pdm_microphone_read(int16_t* buffer, size_t samples) {
@@ -236,9 +269,9 @@ int pdm_microphone_read(int16_t* buffer, size_t samples) {
 
     for (int i = 0; i < samples; i += filter_stride) {
 #if PDM_DECIMATION == 64
-        Open_PDM_Filter_64(in, out, pdm_mic.filter_volume, &pdm_mic.filter);
+        Open_PDM_Filter_64(in, out, FIXED_VOLUME, &pdm_mic.filter);
 #elif PDM_DECIMATION == 128
-        Open_PDM_Filter_128(in, out, pdm_mic.filter_volume, &pdm_mic.filter);
+        Open_PDM_Filter_128(in, out, FIXED_VOLUME, &pdm_mic.filter);
 #else
         #error "Unsupported PDM_DECIMATION value!"
 #endif
@@ -246,6 +279,5 @@ int pdm_microphone_read(int16_t* buffer, size_t samples) {
         in += filter_stride * (PDM_DECIMATION / 8);
         out += filter_stride;
     }
-
     return samples;
 }

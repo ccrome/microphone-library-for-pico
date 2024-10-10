@@ -1,3 +1,21 @@
+# PDM Microphone
+
+This project makes the minor modifications to Sandeep Mistry's 
+repo below: 
+
+https://github.com/ArmDeveloperEcosystem/microphone-library-for-pico
+
+<hr/>
+
+# Seting the gain
+Change
+```C
+#define GAIN_SETTING   0.0032f
+```
+in `src/OpenPDM2PCM/OpenPDMFilter.c`
+
+This is linear, and smaller is larger gain.
+
 # Microphone Library for Pico
 
 Capture audio from a microphone on your [Raspberry Pi Pico](https://www.raspberrypi.org/products/raspberry-pi-pico/) or any [RP2040](https://www.raspberrypi.org/products/rp2040/) based board. 🎤

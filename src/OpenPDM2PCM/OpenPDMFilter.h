@@ -41,7 +41,6 @@
  
 #include <stdint.h>
  
- 
 /* Definitions ---------------------------------------------------------------*/
  
 /*
@@ -85,8 +84,6 @@ typedef struct {
   int64_t OldOut, OldIn, OldZ;
   uint16_t LP_ALFA;
   uint16_t HP_ALFA;
-  uint16_t bit[5];
-  uint16_t byte;
 } TPDMFilter_InitStruct;
  
  
@@ -95,6 +92,8 @@ typedef struct {
 void Open_PDM_Filter_Init(TPDMFilter_InitStruct *init_struct);
 void Open_PDM_Filter_64(uint8_t* data, uint16_t* data_out, uint16_t mic_gain, TPDMFilter_InitStruct *init_struct);
 void Open_PDM_Filter_128(uint8_t* data, uint16_t* data_out, uint16_t mic_gain, TPDMFilter_InitStruct *init_struct);
+void Open_PDM_Filter_Print();
+void Open_PDM_Filter_Ramp(int use_ramp);
  
 #ifdef __cplusplus
 }

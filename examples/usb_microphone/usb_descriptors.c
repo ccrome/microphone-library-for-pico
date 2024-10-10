@@ -24,6 +24,8 @@
  */
 
 #include "tusb.h"
+#include "pico.h"
+#include "pico/unique_id.h"
 
 /* A combination of interfaces must have a unique product id, since PC will save device driver after the first plug.
  * Same VID/PID with different interface e.g MSC (first), then CDC (later) will possibly cause system error on PC.
@@ -74,12 +76,14 @@ uint8_t const * tud_descriptor_device_cb(void)
 //--------------------------------------------------------------------+
 enum
 {
-  ITF_NUM_AUDIO_CONTROL = 0,
-  ITF_NUM_AUDIO_STREAMING,
-  ITF_NUM_TOTAL
+    ITF_NUM_AUDIO_CONTROL = 0,
+    ITF_NUM_AUDIO_STREAMING,
+    ITF_NUM_CDC_0,
+    ITF_NUM_CDC_0_DATA,
+    ITF_NUM_TOTAL
 };
 
-#define CONFIG_TOTAL_LEN    	(TUD_CONFIG_DESC_LEN + CFG_TUD_AUDIO * TUD_AUDIO_MIC_ONE_CH_DESC_LEN)
+#define CONFIG_TOTAL_LEN    	(TUD_CONFIG_DESC_LEN + CFG_TUD_AUDIO * TUD_AUDIO_MIC_ONE_CH_DESC_LEN + CFG_TUD_CDC * TUD_CDC_DESC_LEN)
 
 #if CFG_TUSB_MCU == OPT_MCU_LPC175X_6X || CFG_TUSB_MCU == OPT_MCU_LPC177X_8X || CFG_TUSB_MCU == OPT_MCU_LPC40XX
 // LPC 17xx and 40xx endpoint type (bulk/interrupt/iso) are fixed by its number
@@ -87,6 +91,9 @@ enum
 #define EPNUM_AUDIO   0x03
 #else
 #define EPNUM_AUDIO   0x01
+#define EPNUM_CDC_0_NOTIF   0x82
+#define EPNUM_CDC_0_OUT     0x03
+#define EPNUM_CDC_0_IN      0x83
 #endif
 
 uint8_t const desc_configuration[] =
@@ -95,7 +102,8 @@ uint8_t const desc_configuration[] =
     TUD_CONFIG_DESCRIPTOR(1, ITF_NUM_TOTAL, 0, CONFIG_TOTAL_LEN, 0x00, 100),
 
     // Interface number, string index, EP Out & EP In address, EP size
-    TUD_AUDIO_MIC_ONE_CH_DESCRIPTOR(/*_itfnum*/ ITF_NUM_AUDIO_CONTROL, /*_stridx*/ 0, /*_nBytesPerSample*/ CFG_TUD_AUDIO_FUNC_1_N_BYTES_PER_SAMPLE_TX, /*_nBitsUsedPerSample*/ CFG_TUD_AUDIO_FUNC_1_N_BYTES_PER_SAMPLE_TX*8, /*_epin*/ 0x80 | EPNUM_AUDIO, /*_epsize*/ CFG_TUD_AUDIO_EP_SZ_IN)
+    TUD_AUDIO_MIC_ONE_CH_DESCRIPTOR(/*_itfnum*/ ITF_NUM_AUDIO_CONTROL, /*_stridx*/ 0, /*_nBytesPerSample*/ CFG_TUD_AUDIO_FUNC_1_N_BYTES_PER_SAMPLE_TX, /*_nBitsUsedPerSample*/ CFG_TUD_AUDIO_FUNC_1_N_BYTES_PER_SAMPLE_TX*8, /*_epin*/ 0x80 | EPNUM_AUDIO, /*_epsize*/ CFG_TUD_AUDIO_EP_SZ_IN),
+    TUD_CDC_DESCRIPTOR(ITF_NUM_CDC_0, 4, EPNUM_CDC_0_NOTIF, 8, EPNUM_CDC_0_OUT, EPNUM_CDC_0_IN, 64),
 };
 
 // Invoked when received GET CONFIGURATION DESCRIPTOR
@@ -115,8 +123,8 @@ uint8_t const * tud_descriptor_configuration_cb(uint8_t index)
 char const* string_desc_arr [] =
 {
     (const char[]) { 0x09, 0x04 }, 	// 0: is supported language is English (0x0409)
-    "PaniRCorp",                   	// 1: Manufacturer
-    "MicNode",              		// 2: Product
+    "Zipline",                   	// 1: Manufacturer
+    PRODUCT_DESCRIPTION,                // 2: Product
     "123456",                      	// 3: Serials, should use chip ID
     "UAC2",                 	 	// 4: Audio Interface
 };
@@ -138,11 +146,14 @@ uint16_t const* tud_descriptor_string_cb(uint8_t index, uint16_t langid)
   }else
   {
     // Convert ASCII string into UTF-16
-
-    if ( !(index < sizeof(string_desc_arr)/sizeof(string_desc_arr[0])) ) return NULL;
-
-    const char* str = string_desc_arr[index];
-
+      const char* str = string_desc_arr[index];
+      char str_ptr[31];
+      if (index == 3) { // Specifically the serial number
+          pico_get_unique_board_id_string(str_ptr, 30);
+          str = str_ptr;
+      } else {
+          if ( !(index < sizeof(string_desc_arr)/sizeof(string_desc_arr[0])) ) return NULL;
+      }
     // Cap at max char
     chr_count = strlen(str);
     if ( chr_count > 31 ) chr_count = 31;

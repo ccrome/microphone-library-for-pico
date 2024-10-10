@@ -1,0 +1,30 @@
+name: Build ARM project
+on:
+  push:
+
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container:
+      image: dataspeedinc/gcc-arm-none-eabi:latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: install pyhton
+        run: |
+          apt update
+          apt install -y python3
+          apt install -y cmake g++
+
+      - name: Build
+        run: |
+          make APPLICATION_VERSION="\"${{ github.ref }}_${{ github.ref_name }}_${{ github.sha }}\""
+
+      - name: Upload UF2 artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: usb_microphone_UF2
+          path: build/examples/usb_microphone/Audio.uf2

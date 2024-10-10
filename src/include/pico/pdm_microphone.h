@@ -21,6 +21,7 @@ struct pdm_microphone_config {
     uint sample_buffer_size;
 };
 
+void pdm_microphone_set_clkdiv(float clkdiv);
 int pdm_microphone_init(const struct pdm_microphone_config* config);
 void pdm_microphone_deinit();
 
@@ -31,7 +32,7 @@ void pdm_microphone_set_samples_ready_handler(pdm_samples_ready_handler_t handle
 void pdm_microphone_set_filter_max_volume(uint8_t max_volume);
 void pdm_microphone_set_filter_gain(uint8_t gain);
 void pdm_microphone_set_filter_volume(uint16_t volume);
-
 int pdm_microphone_read(int16_t* buffer, size_t samples);
+void pdm_microphone_set_clkdiv_nudge(uint8_t nudge);
 
 #endif

@@ -24,6 +24,8 @@
  */
 
 #include "usb_microphone.h"
+#include "commandline.h"
+
 
 // Audio controls
 // Current states
@@ -66,6 +68,7 @@ uint16_t usb_microphone_write(const void * data, uint16_t len)
 void usb_microphone_task()
 {
   tud_task();
+  cdc_task();
 }
 
 //--------------------------------------------------------------------+
